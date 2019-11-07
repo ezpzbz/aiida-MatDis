@@ -1,0 +1,39 @@
+{
+    "name": "aiida-matdis",
+    "author": "Pezhman Zarabadi-Poor",
+    "author_email": "pzarabadip@gmail.com",
+    "description": "Collection of AiiDA WorkChains for Material Discovery Studies",
+    "url": "https://github.com/pzarabadip/aiida-matdis",
+    "license": "MIT License",
+    "classifiers": [
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7"
+    ],
+    "version": "1.0.0",
+    "setup_requires": ["reentry"],
+    "reentry_register": true,
+    "install_requires": [
+        "aiida_core >= 1.0.0"
+    ],
+    "entry_points": {
+        "aiida.workflows": [
+            "matdis.vlcc = aiida_matdis.workchains:VLCCWorkChain",
+            "matdis.isotherm_multi_comp = aiida_matdis.workchains:IsothermMultiCompWorkChain",
+            "matdis.voronoi_energy = aiida_matdis.workchains:VoronoiEnergyWorkChain"
+        ]
+    },
+    "data_files": [
+        [".", ["setup.json"]]
+    ],
+    "extras_require": {
+        "testing": [
+            "pytest==4.4.1"
+        ],
+        "pre-commit": [
+                "pre-commit==1.17.0",
+                "yapf==0.28.0",
+                "prospector==1.1.7",
+                "pylint==2.3.1"
+        ]
+    }
+}
