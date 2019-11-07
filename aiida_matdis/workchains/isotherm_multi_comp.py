@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""IsothermMultiTemp workchain."""
+# TODO: Adopt to construct full multicomponent isotherm.
+"""IsothermMultiCompWorkChain"""
 from __future__ import absolute_import
 import os
 from six.moves import range
