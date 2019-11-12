@@ -10,7 +10,7 @@ from aiida.plugins import CalculationFactory, DataFactory, WorkflowFactory
 from aiida.orm import Bool, Dict, List, Str, SinglefileData
 from aiida.engine import calcfunction
 from aiida.engine import ToContext, WorkChain, append_, if_, while_
-from aiida_matdis.utils import aiida_dict_merge, check_resize_unit_cell
+from aiida_matdis.utils import aiida_dict_merge, get_replication_factors
 
 RaspaBaseWorkChain = WorkflowFactory('raspa.base')  #pylint: disable=invalid-name
 

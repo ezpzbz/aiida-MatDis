@@ -19,7 +19,8 @@
         "aiida.workflows": [
             "matdis.vlcc = aiida_matdis.workchains:VLCCWorkChain",
             "matdis.isotherm_multi_comp = aiida_matdis.workchains:IsothermMultiCompWorkChain",
-            "matdis.voronoi_energy = aiida_matdis.workchains:VoronoiEnergyWorkChain"
+            "matdis.voronoi_energy = aiida_matdis.workchains:VoronoiEnergyWorkChain",
+            "matdis.hts = aiida_matdis.workchains:HTSWorkChain"
         ]
     },
     "data_files": [
