@@ -9,4 +9,4 @@ original design.
 * Information about other WorkChains from other groups which we are using for out research .
 
 **NOTE**: Documentation for each WorkChain including the references, sources, know-hows, etc are provided in
-the Wiki.
+the [Wiki](https://github.com/pzarabadip/aiida-MatDis/wiki).
