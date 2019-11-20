@@ -2,14 +2,10 @@
 """Unit cell multiplication"""
 from __future__ import absolute_import
 import six
-# TODO: Convert to calcfunction
 
-from aiida.engine import calcfunction
-from aiida.orm import Dict
 
-@calcfunction
-def get_replication_factors(cif, params):  #pylint: disable=too-many-locals
-    """Returns the replication factors for the cell vectors to respect, in every direction:
+def get_replciation_factors(cif, threshold):  #pylint: disable=too-many-locals
+    """Returns the multiplication factors for the cell vectors to respect, in every direction:
     min(perpendicular_width) > threshold."""
     from math import cos, sin, sqrt, fabs, ceil, pi
     import numpy as np
@@ -51,12 +47,6 @@ def get_replication_factors(cif, params):  #pylint: disable=too-many-locals
     perpwidth[2] = cell[2, 2]
 
     #prevent from crashing if threshold value is zero
-    thr = max(0.001, 2 * params["ff_cutoff"])
+    thr = max(0.001, threshold)
 
-    resize = {
-        'nx': int(ceil(thr / perpwidth[0])),
-        'ny': int(ceil(thr / perpwidth[1])),
-        'nz': int(ceil(thr / perpwidth[2]))
-    }
-
-    return Dict(dict=resize)
+    return int(ceil(thr / perpwidth[0])), int(ceil(thr / perpwidth[1])), int(ceil(thr / perpwidth[2]))

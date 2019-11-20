@@ -25,7 +25,7 @@ def dict_merge(dct, merge_dct):
 
 
 @calcfunction
-def aiida_dict_merge(to_dict, from_dict):
+def update_workchain_params(to_dict, from_dict):
     """Merge two aiida Dict objects."""
     to_dict = to_dict.get_dict()
 

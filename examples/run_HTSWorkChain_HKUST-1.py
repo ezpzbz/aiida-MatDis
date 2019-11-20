@@ -34,6 +34,7 @@ def main(zeopp_code_label, raspa_code_label):
 
     builder.raspa_base.raspa.code = Code.get_from_string(raspa_code_label)
     builder.zeopp.code = Code.get_from_string(zeopp_code_label)
+    builder.zeopp.atomic_radii = SinglefileData(file=os.path.abspath('../data/UFF.rad'))
 
     options = {
         "resources": {
@@ -45,7 +46,8 @@ def main(zeopp_code_label, raspa_code_label):
     }
     builder.raspa_base.raspa.metadata.options = options
     builder.zeopp.metadata.options = options
-    builder.structure = CifData(file=os.path.abspath('../data/HKUST-1.cif'), label="HKUST-1")
+    builder.structure = CifData(file=os.path.abspath('../data/HKUST-1.cif'), label="hkust1")
+
     builder.mixture = Dict(dict={
         'comp1': {
             'name': 'xenon',
@@ -67,7 +69,8 @@ def main(zeopp_code_label, raspa_code_label):
             'raspa_widom_cycles': 100,  # Default: 1e5
             'raspa_gcmc_init_cycles': 100,  # Default: 1e3
             'raspa_gcmc_prod_cycles': 100,  # Default: 1e4
-            'pressure_list': [1.0, 2.0]
+            'pressure_list': [1.0, 2.0],
+            'case': 'Xe_Kr',
         })
 
     run(builder)
