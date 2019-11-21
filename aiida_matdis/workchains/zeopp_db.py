@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ZeoppDBWorkChain"""
+"""GACMWorkChain: An AiiDA workchain for Geomtery-based Analysis of Crystalline Materials using Zeo++"""
 from __future__ import absolute_import
 import os
 from six.moves import range
@@ -52,16 +52,16 @@ ZEOPPPARAMETERS_DEFAULT = Dict(
         "zeopp_block_samples": int(100),  # int, Number of samples for BLOCK calculation (per A^3)
     })
 
-class ZeoppDBWorkChain(WorkChain):
-    """ZeoppDBWorkChain is designed to perform a series of calculation and
+class GACMWorkChain(WorkChain):
+    """GACMWorkChain is designed to perform a series of calculation and
     and constrcut the database for later usage in other workchains.
     """
 
     @classmethod
     def define(cls, spec):
-        super(ZeoppDBWorkChain, cls).define(spec)
+        super(GACMWorkChain, cls).define(spec)
 
-        # ZeoppDBWorkChain inputs!
+        # GACMWorkChain inputs!
         spec.input("structure", valid_type=CifData, required=True, help="Input structure in cif format")
         spec.input("parameters",
                    valid_type=Dict,
@@ -105,7 +105,7 @@ class ZeoppDBWorkChain(WorkChain):
             'metadata': {
                 'label': "ZeoppResSaVolpoBlock",
                 'call_link_label': 'run_zeopp',
-                'description': 'Called by ZeoppDBWorkChain',
+                'description': 'Called by GACMWorkChain',
             },
             'structure': self.inputs.structure,
             'atomic_radii': self.inputs.zeopp.atomic_radii,
