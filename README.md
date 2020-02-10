@@ -4,8 +4,7 @@ You may find three types of AiiDA WorkChains in this
 repository.
 
 * WorkChains which are developed by myself.
-* WorkChains which have been developed on top of ones developed by other collaborators and
-researchers for the purpose of my research but are provided here due to considerable deviation from
+* WorkChains which have been developed on top of [AiiDA LSMO WorkChains](https://github.com/danieleongari/aiida-lsmo) for the purpose of my research but are provided here for now due to considerable deviation from
 original design.
 * Information about other WorkChains from other groups which we are using for our research .
 
@@ -40,7 +39,8 @@ If you use above-mentioned workchains for gas adsorption, please cite [this pape
 
 # Documentation
 Documentation for each WorkChain including the references, sources, know-hows, etc are provided in
-the Wiki (In Progress).
+the [Wiki](https://github.com/pzarabadip/aiida-MatDis/wiki) (In Progress).
 
 # Acknowledgment
 I would like to thank the funding received from the European Union’s Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie Actions and cofinancing by the South Moravian Region under agreement 665860. This software reflects only the authors’ view and the EU is not responsible for any use that may be made of the information it contains.
+
