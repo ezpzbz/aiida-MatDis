@@ -2,9 +2,9 @@
 """Unit cell multiplication"""
 from __future__ import absolute_import
 import six
-# TODO: Convert to calcfunction
 
-def check_resize_unit_cell(cif, threshold):  #pylint: disable=too-many-locals
+
+def get_replciation_factors(cif, threshold):  #pylint: disable=too-many-locals
     """Returns the multiplication factors for the cell vectors to respect, in every direction:
     min(perpendicular_width) > threshold."""
     from math import cos, sin, sqrt, fabs, ceil, pi

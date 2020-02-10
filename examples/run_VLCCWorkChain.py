@@ -34,21 +34,22 @@ def main(codelabel):
 
     # Specifying the code
     builder.raspa_base.raspa.code = code
-    builder.raspa_base.fixtures = {
-        'fixture_001': ('aiida_raspa.utils', 'check_gemc_box')
+    builder.raspa_base.fixers = {
+        'fixer_001': ('aiida_raspa.utils', 'check_gemc_box')
     }
-    builder.molecule = Str('ch4')
+    builder.molecule = Str('xenon')
     builder.parameters = Dict(
         dict={
-            'raspa_init_cycles': 100,  # Default: 1e3
-            'raspa_prod_cycles': 100,  # Default: 1e4
-            'box_one_nmols': 150,
-            'box_two_nmols': 150,
+            'raspa_init_cycles': 200,  # Default: 1e3
+            'raspa_prod_cycles': 200,  # Default: 1e4
+            'box_one_nmols': 100,
+            'box_two_nmols': 100,
             'box_one_length': 30,
             'box_two_length': 30,
-            'T_min': 280,
-            'T_max': 300,
-            'dT': 10,
+            'temperature_list':[170],
+            # 'T_min': 280,
+            # 'T_max': 300,
+            # 'dT': 10,
         })
 
     # Specifying the scheduler options
