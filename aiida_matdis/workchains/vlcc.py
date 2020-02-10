@@ -4,11 +4,11 @@ from __future__ import absolute_import
 import os
 
 # from aiida.common import AttributeDict
-from aiida.plugins import WorkflowFactory
+from aiida.plugins import WorkflowFactory, CalculationFactory
 from aiida.orm import Dict, Int, List, Str
 from aiida.engine import calcfunction, ToContext, WorkChain, while_, append_
 # TODO: Should we?
-import aiida_lsmo.calcfunctions.ff_builder_module as FFBuilder
+# import aiida_lsmo.calcfunctions.ff_builder_module as FFBuilder
 
 from aiida_matdis.aide_de_camp import (get_molecule_dict,
                                        get_ff_parameters,
@@ -17,7 +17,7 @@ from aiida_matdis.aide_de_camp import (get_molecule_dict,
                                        update_workchain_params)
 
 RaspaBaseWorkChain = WorkflowFactory('raspa.base')  #pylint: disable=invalid-name
-
+FFBuilder = CalculationFactory('lsmo.ff_builder')
 
 VLCPARAMETERS_DEFAULT = Dict(
     dict={  #TODO: create IsothermParameters instead of Dict # pylint: disable=fixme
@@ -58,19 +58,13 @@ class VLCCWorkChain(WorkChain):
         """Initialize variables and setup screening protocol!"""
         if isinstance(self.inputs.molecule, Str):
             self.ctx.molecule = get_molecule_dict(self.inputs.molecule)
-        # else:
-            # raise ValueError('Molecule is not provided properly!')
 
         self.ctx.parameters = update_workchain_params(VLCPARAMETERS_DEFAULT, self.inputs.parameters)
 
         self.ctx.temperatures = get_temperature_points(self.ctx.parameters)
-        # self.ctx.ff_params = get_ff_parameters(self.ctx.components, self.ctx.parameters)
         self.ctx.ff_params = get_ff_parameters(self.ctx.parameters, molecule=self.ctx.molecule, components=None)
 
-        # self.ctx.raspa_parameters = get_raspa_param(self.ctx.parameters, self.ctx.molecule, self.ctx.temperatures)
-        # self.ctx.current_T_index = 0
         self.report("<{}> number of temperature points are chosen for GEMC".format(len(self.ctx.temperatures)))
-        # self.report("Starting from <{}>K, then toward maximum <{}>, and finally minimum <{}>".format(self.ctx.temperatures[1],self.ctx.temperatures[0][-1],self.ctx.temperatures[0][0]))
 
     def _get_raspa_params(self):
         """Write RASPA input parameters from scratch, for a GEMC calculation"""
@@ -120,10 +114,9 @@ class VLCCWorkChain(WorkChain):
         """It runs a GEMC calculation in RASPA."""
         self.ctx.raspa_inputs = self.exposed_inputs(RaspaBaseWorkChain, 'raspa_base')
         self.ctx.raspa_params = self._get_raspa_params()
-        self.ctx.raspa_inputs['raspa']['file'] = FFBuilder.ff_builder(self.ctx.ff_params)
+        self.ctx.raspa_inputs['raspa']['file'] = FFBuilder(self.ctx.ff_params)
 
         for index, temp in enumerate(self.ctx.temperatures):
-            # label = "RaspaGEMC_{}".format(index + 1)
             self.ctx.raspa_inputs['metadata']['label'] = "RaspaGEMC_{}".format(index + 1)
             self.ctx.raspa_inputs['metadata']['call_link_label'] = "run_raspa_gemc_{}".format(index + 1)
             self.ctx.raspa_params["System"]["box_one"]["ExternalTemperature"] = temp
@@ -131,26 +124,19 @@ class VLCCWorkChain(WorkChain):
             self.ctx.raspa_inputs['raspa']["parameters"] = Dict(dict=self.ctx.raspa_params)
             running = self.submit(RaspaBaseWorkChain, **self.ctx.raspa_inputs)
             self.report("pk: <{}> | Running Raspa GEMC calculation".format(running.pk))
-            # self.to_context(**{label: running})
             self.to_context(raspa_gemc=append_(running))
 
     def inspect_raspa_gemc(self):
         """Assering the submitted calculations """
         for workchain in self.ctx.raspa_gemc:
             assert workchain.is_finished_ok
-        # for index, temp in enumerate(self.ctx.temperatures):
-        #     label = "RaspaGEMC_{}".format(index + 1)
-        #     assert self.ctx[label].is_finished_ok
 
     def return_results(self):
         """Extracting and wrapping up the results."""
         gemc_out_dict = {}
         for workchain in self.ctx.raspa_gemc:
             gemc_out_dict[workchain.label] = workchain.outputs.output_parameters
-        # for index, temp in enumerate(self.ctx.temperatures):
-        #     label = "RaspaGEMC_{}".format(index + 1)
-        #     gemc_out_dict[label] = self.ctx[label].outputs.output_parameters
-
+        
         self.out("vlcc_output", get_vlcc_output(self.ctx.temperatures, **gemc_out_dict))
         self.report("VLCCWorkChain has been completed successfully: Results Dict<{}>".format(self.outputs["vlcc_output"].pk))
 

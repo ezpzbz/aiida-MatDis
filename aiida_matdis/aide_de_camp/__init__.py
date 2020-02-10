@@ -12,5 +12,9 @@ from .general import (get_molecules_input_dict,
                       get_output_parameters,
                       get_vlcc_output,
                       get_temperature_points,
-                      extract_merge_outputs)
+                      extract_merge_outputs,
+                      update_components,
+                      modify_zeopp_parameters,
+                      modify_pm_parameters,
+                      extract_wrap_results)
 from .other import update_workchain_params, dict_merge

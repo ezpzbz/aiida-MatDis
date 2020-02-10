@@ -9,6 +9,8 @@ from aiida.plugins import CalculationFactory, DataFactory, WorkflowFactory
 from aiida.orm import Dict, List, SinglefileData
 from aiida.engine import calcfunction
 
+NetworkParameters = DataFactory("zeopp.parameters")
+
 @calcfunction
 def get_molecule_dict(molecule_name):
     """Get a Dict from the isotherm_molecules.yaml"""
@@ -32,94 +34,28 @@ def get_molecules_input_dict(molecules, wc_params):
     for key, value in molecules.get_dict().items():
         molecules_dict[key] = yaml_dict[value['name']]
         molecules_dict[key]['molfraction'] = value['molfraction']
-        probe_rad = molecules_dict[key]['proberad']
-        if 'zeopp_accuracy' in wc_params.keys():
+        if wc_params['probe_based']:
+            probe_rad = wc_params['probe_rad']
             molecules_dict[key]['zeopp'] = {
                 'ha': wc_params['zeopp_accuracy'],
-                'res': True,
+                'res': False,
                 'sa': [probe_rad, probe_rad, wc_params['zeopp_sa_samples']],
                 'volpo': [probe_rad, probe_rad, wc_params['zeopp_volpo_samples']],
                 'block': [probe_rad, wc_params['zeopp_block_samples']],
             }
+        else:
+            probe_rad = molecules_dict[key]['proberad']
+            if 'zeopp_accuracy' in wc_params.keys():
+                molecules_dict[key]['zeopp'] = {
+                    'ha': wc_params['zeopp_accuracy'],
+                    'res': True,
+                    'sa': [probe_rad, probe_rad, wc_params['zeopp_sa_samples']],
+                    'volpo': [probe_rad, probe_rad, wc_params['zeopp_volpo_samples']],
+                    'block': [probe_rad, wc_params['zeopp_block_samples']],
+                }
 
     return Dict(dict=molecules_dict)
 
-# @calcfunction
-# def get_molecules_input_dict(molecules, wc_params):
-#     """Construct components dict"""
-#     import ruamel.yaml as yaml
-#     molecules_dict = {}
-#     thisdir = os.path.dirname(os.path.abspath(__file__))
-#     yamlfile = os.path.join(thisdir, "..", "data", "molecules.yaml")
-#     with open(yamlfile, 'r') as stream:
-#         yaml_dict = yaml.safe_load(stream)
-#     if isinstance(molecules, Dict):
-#         for key, value in molecules.get_dict().items():
-#             molecules_dict[key] = yaml_dict[value['name']]
-#             molecules_dict[key]['molfraction'] = value['molfraction']
-#             probe_rad = molecules_dict[key]['proberad']
-#             molecules_dict[key]['zeopp'] = {
-#                 'ha': wc_params['zeopp_accuracy'],
-#                 'res': True,
-#                 'sa': [probe_rad, probe_rad, wc_params['zeopp_sa_samples']],
-#                 'volpo': [probe_rad, probe_rad, wc_params['zeopp_volpo_samples']],
-#                 'block': [probe_rad, wc_params['zeopp_block_samples']],
-#             }
-#     elif isinstance(molecules, List):
-#         for mol in molecules:
-#             probe_rad = yaml_dict[mol]['proberad']
-#             molecules_dict[mol] = {}
-#             molecules_dict[mol]['zeopp'] = {
-#                 'ha': wc_params['zeopp_accuracy'],
-#                 'res': True,
-#                 'sa': [probe_rad, probe_rad, wc_params['zeopp_sa_samples']],
-#                 'volpo': [probe_rad, probe_rad, wc_params['zeopp_volpo_samples']],
-#                 'block': [probe_rad, wc_params['zeopp_block_samples']],
-#             }
-#
-#     return Dict(dict=molecules_dict)
-
-# @calcfunction
-# def get_zeopp_input_dict(molecules, wc_params):
-#     """Construct components dict"""
-#     import ruamel.yaml as yaml
-#     zeopp_dict = {}
-#     thisdir = os.path.dirname(os.path.abspath(__file__))
-#     yamlfile = os.path.join(thisdir, "..", "data", "molecules.yaml")
-#     with open(yamlfile, 'r') as stream:
-#         yaml_dict = yaml.safe_load(stream)
-#     # for key, value in molecules.get_dict().items():
-#     for mol in molecules:
-#         # zeopp_dict[key] = yaml_dict[value['name']]
-#         probe_rad = yaml_dict[mol]['proberad']
-#         zeopp_dict[mol]['zeopp'] = {
-#             'ha': wc_params['zeopp_accuracy'],
-#             'res': True,
-#             'sa': [probe_rad, probe_rad, wc_params['zeopp_sa_samples']],
-#             'volpo': [probe_rad, probe_rad, wc_params['zeopp_volpo_samples']],
-#             'block': [probe_rad, wc_params['zeopp_block_samples']],
-#         }
-#     return Dict(dict=zeopp_dict)
-
-
-# Calcfuntions
-# @calcfunction
-# def get_zeopp_parameters(molecule, wcparams):
-#     """Get the ZeoppParameters from the components Dict!"""
-#     import ruamel.yaml as yaml
-#     thisdir = os.path.dirname(os.path.abspath(__file__))
-#     yamlfile = os.path.join(thisdir, "..", "data", "molecules.yaml")
-#     with open(yamlfile, 'r') as stream:
-#         yaml_dict = yaml.safe_load(stream)
-#     proberad = yaml_dict['proberad']
-#     params = {
-#         'ha': 'DEF',
-#         'res': False,
-#         'sa': [proberad, proberad, wcparams['zeopp_sa_samples']],
-#         'volpo': [proberad, proberad, wcparams['zeopp_volpo_samples']],
-#         'block': [proberad, wcparams['zeopp_block_samples']],
-#     }
-#     return ZeoppParameters(dict=params)
 
 @calcfunction
 def get_ff_parameters(wc_params, molecule=None, components=None):
@@ -160,7 +96,6 @@ def extract_merge_outputs(molecules, **all_out_dict):
         out[comp] = all_out_dict[zeopp_label].get_dict()
         out[comp]['is_porous'] = out[comp]["POAV_A^3"] > 0.000
     return Dict(dict=out)
-
 
 
 # TODO: Make it multi-component compatible for experimenting the protocol for choosing pressure. #pylint: disable=fixme
@@ -209,12 +144,14 @@ def choose_pressure_points(wc_params):
 def get_output_parameters(wc_params, pressures=None, components=None, **all_out_dict):
     """ Extract Widom and GCMC results to isotherm Dict """
     out_dict = {}
-    # out_dict['geometric_output'] = {}
-
-    # for key in all_out_dict:
-    #     if key.startswith('zeopp'):
-    #         comp = key.split('_')[1]
-    #         out_dict['geometric_output'][comp] = all_out_dict[key].get_dict()
+    out_dict['geometric_output'] = {}
+    if 'geometric' in all_out_dict.keys():
+        out_dict['geometric_output'] = all_out_dict['geometric']['geometric_output']
+    else:
+        for key in all_out_dict:
+            if key.startswith('zeopp'):
+                comp = key.split('_')[1]
+                out_dict['geometric_output'][comp] = all_out_dict[key].get_dict()
 
     if components is not None:  #At least we have the widom!
         strc_label = list(all_out_dict["widom_{}".format(components['comp1']['name'])].get_dict().keys())[0]
@@ -321,12 +258,12 @@ def get_vlcc_output(temperatures, **gemc_out_dict):
         'adsorbate_density_average': {'vapor':[],'liquid':[]},
         'adsorbate_density_dev': {'vapor':[],'liquid':[]},
         'adsorbate_density_unit': 'kg/m^3',
-        "ads_ads_total_energy_average":{'vapor':[],'liquid':[]},
-        "ads_ads_total_energy_dev":{'vapor':[],'liquid':[]},
-        "ads_ads_vdw_energy_average":{'vapor':[],'liquid':[]},
-        "ads_ads_vdw_energy_dev":{'vapor':[],'liquid':[]},
-        "ads_ads_coulomb_energy_average":{'vapor':[],'liquid':[]},
-        "ads_ads_coulomb_energy_dev":{'vapor':[],'liquid':[]},
+        "energy_ads/ads_tot_average":{'vapor':[],'liquid':[]},
+        "energy_ads/ads_tot_dev":{'vapor':[],'liquid':[]},
+        "energy_ads/ads_vdw_average":{'vapor':[],'liquid':[]},
+        "energy_ads/ads_vdw_dev":{'vapor':[],'liquid':[]},
+        "energy_ads/ads_coulomb_average":{'vapor':[],'liquid':[]},
+        "energy_ads/ads_coulomb_dev":{'vapor':[],'liquid':[]},
         "energy_unit": "kJ/mol",
         "box_ax_average":{'vapor':[],'liquid':[]},
         "box_ax_dev":{'vapor':[],'liquid':[]},
@@ -347,12 +284,12 @@ def get_vlcc_output(temperatures, **gemc_out_dict):
     ]
 
     labels_general = [
-        "ads_ads_total_energy_average",
-        "ads_ads_total_energy_dev",
-        "ads_ads_vdw_energy_average",
-        "ads_ads_vdw_energy_dev",
-        "ads_ads_coulomb_energy_average",
-        "ads_ads_coulomb_energy_dev",
+        "energy_ads/ads_tot_average",
+        "energy_ads/ads_tot_dev",
+        "energy_ads/ads_vdw_average",
+        "energy_ads/ads_vdw_dev",
+        "energy_ads/ads_coulomb_average",
+        "energy_ads/ads_coulomb_dev",
         "box_ax_average",
         "box_ax_dev",
         "box_by_average",
@@ -385,3 +322,100 @@ def get_vlcc_output(temperatures, **gemc_out_dict):
             vlcc_output[label]['liquid'].append(gemc_out_liq["general"][label])
 
     return Dict(dict=vlcc_output)
+
+# VoronoiEnergyWorkChain
+@calcfunction
+def update_components(inp_components, zeopp_res_output):
+    """ Updating component Dictionary"""
+    components = inp_components.get_dict()
+    # probe_radius = (zeopp_res_output.get_dict()["Largest_free_sphere"] / 2) * 0.95
+    probe_radius = (zeopp_res_output.get_dict()["Largest_free_sphere"] / 2)
+    components['PLD'] = {'probe_radius': probe_radius}
+    return Dict(dict=components)
+
+
+@calcfunction
+def modify_zeopp_parameters(param, **kwargs):
+    """Modifying the NetworkParameters to keep the provenance."""
+    for key in kwargs.keys():  # pylint: disable=consider-iterating-dictionary
+        if key in ['zeopp_res', 'zeopp_visvoro', 'probe', 'components']:
+            if key == 'zeopp_res':
+                params = kwargs[key].get_dict()
+                updated_params = {"res": True, "ha": param['pld_accuracy']}
+                params.update(updated_params)
+            if key == 'zeopp_visvoro':
+                params = kwargs[key].get_dict()
+                probe_radius = kwargs['components'].get_dict()[kwargs['probe'].value]['probe_radius']
+                # del params["res"]
+                updated_params = {"res": False,"visVoro": probe_radius, "ha": param['visvoro_accuracy']}
+                params.update(updated_params)
+        else:
+            raise AttributeError("The modification protocol is not supported!")
+
+    return NetworkParameters(dict=params)
+
+
+@calcfunction
+def modify_pm_parameters(pm_parameters, input_template):
+    params = pm_parameters.get_dict()
+    params['input_template'] = input_template.value
+    return Dict(dict=params)
+
+
+@calcfunction
+def extract_wrap_results(**kwargs):
+    """
+    It gets all generated output_parameters from workchain,
+    process them, and wrap them in a single Dict object!
+    """
+    # pylint: disable=too-many-locals
+    results = {}
+    # ZeoppCalculation Section
+    results['zeopp'] = {}
+    results['zeopp']['Largest_free_sphere'] = kwargs['zeopp_res'].get_dict()['Largest_free_sphere']
+    results['zeopp']['Largest_included_sphere'] = kwargs['zeopp_res'].get_dict()['Largest_included_sphere']
+    # PorousMaterials Secion!
+    if 'pm_out' in kwargs.keys():
+        import pandas as pd
+        K_to_kJ_mol = 1.0 / 120.273  # pylint: disable=invalid-name
+        R = 8.3144598  # pylint: disable=invalid-name
+        results['porousmaterials'] = {}
+        results["porousmaterials"] = kwargs['pm_out'].get_dict()
+        ev_setting = kwargs['ev_setting']
+
+    ev_output_list = []
+    for key in kwargs.keys():  # pylint: disable=consider-iterating-dictionary
+        if key.startswith('pm_ev'):
+            ev_output_list.append(kwargs[key])
+    for ev_out in ev_output_list:
+        fname = ev_out.filename
+        comp = fname[:-4].split("_")[-1]
+        probe = fname[:-4].split("_")[-2] + "_probe"
+        density = results["porousmaterials"][comp][probe]['framework_density']
+        temperature = results["porousmaterials"][comp][probe]['temperature']
+        output_abs_path = os.path.join(
+            ev_out._repository._get_base_folder().abspath,  # pylint: disable=protected-access
+            fname
+        )
+        df = pd.read_csv(output_abs_path, skiprows=5)  # pylint: disable=invalid-name
+        n_nodes = df.shape[0]
+        minimum = df.Ev_K.min()
+        average = df.Ev_K.mean() * K_to_kJ_mol
+        boltzmann_factor_sum = df.boltzmann_factor.sum()
+        wtd_energy_sum = df.weighted_energy_K.sum()
+        adsorption_energy = (wtd_energy_sum / boltzmann_factor_sum) * K_to_kJ_mol
+        Kh = boltzmann_factor_sum / (R * temperature * n_nodes * density * 100000.0)  # pylint: disable=invalid-name
+        results['porousmaterials'][comp][probe]['Ev_average'] = average
+        results['porousmaterials'][comp][probe]["Eads_average"] = adsorption_energy
+        results['porousmaterials'][comp][probe]["Kh"] = Kh
+
+        for percentile in ev_setting:
+            threshold = (percentile / 100) * minimum
+            df_selected = df[df['Ev_K'] <= threshold]
+            num_selected_nodes = df_selected.shape[0]
+            percentile_average = df_selected.mean()['Ev_K'] * K_to_kJ_mol
+            results['porousmaterials'][comp][probe]["Ev_p" + str(percentile)] = percentile_average
+            results['porousmaterials'][comp][probe]["number_of_Voronoi_nodes_in_p" +
+                                                    str(percentile)] = num_selected_nodes
+
+    return Dict(dict=results)

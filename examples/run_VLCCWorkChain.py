@@ -34,8 +34,8 @@ def main(codelabel):
 
     # Specifying the code
     builder.raspa_base.raspa.code = code
-    builder.raspa_base.fixtures = {
-        'fixture_001': ('aiida_raspa.utils', 'check_gemc_box')
+    builder.raspa_base.fixers = {
+        'fixer_001': ('aiida_raspa.utils', 'check_gemc_box')
     }
     builder.molecule = Str('xenon')
     builder.parameters = Dict(

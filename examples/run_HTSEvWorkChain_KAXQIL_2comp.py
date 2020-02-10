@@ -10,10 +10,10 @@ import click
 
 from aiida.engine import run
 from aiida.plugins import DataFactory, WorkflowFactory
-from aiida.orm import Code, Dict
+from aiida.orm import Code, Dict, load_node
 
 # Workchain objects
-HTSWorkChain = WorkflowFactory('matdis.hts')  # pylint: disable=invalid-name
+HTSEvWorkChain = WorkflowFactory('matdis.hts_ev')  # pylint: disable=invalid-name
 
 # Data objects
 CifData = DataFactory('cif')  # pylint: disable=invalid-name
@@ -27,50 +27,30 @@ SinglefileData = DataFactory('singlefile')
 def main(zeopp_code_label, raspa_code_label):
     """
     Prepare inputs and submit the Isotherm workchain.
-    Usage: verdi run run_HTSWorkChain_HKUST-1_4comp.py zeopp@teslin raspa37@teslin
+    Usage: verdi run run_HTSEvWorkChain_KAXQIL_2comp.py zeopp@teslin raspa37@teslin
     """
 
-    builder = HTSWorkChain.get_builder()
+    builder = HTSEvWorkChain.get_builder()
 
-    builder.metadata.label = "test"
+    builder.metadata.label = "test_ev"
 
-    builder.structure = CifData(file=os.path.abspath('../data/HKUST-1.cif'), label="hkust1")
-    # builder.gamc.structure = CifData(file=os.path.abspath('../data/HKUST-1.cif'), label="hkust1")
+    builder.structure = CifData(file=os.path.abspath('../aiida_matdis/data/KAXQIL_clean_P1.cif'), label="kaxqil")
 
-    builder.molecules = Dict(dict={
+    builder.mixture = Dict(dict={
         'comp1': {
-            'name': 'ch4',
-            'molfraction': 0.2
+            'name': 'xenon',
+            'molfraction': 0.20
         },
         'comp2': {
             'name': 'krypton',
-            'molfraction': 0.8
+            'molfraction': 0.80
         }
     })
 
-
-
-    # builder.molecules = Dict(dict={
-    #     'comp1': {
-    #         'name': 'xenon',
-    #         'molfraction': 0.65
-    #     },
-    #     'comp2': {
-    #         'name': 'co2',
-    #         'molfraction': 0.05
-    #     },
-    #     'comp3': {
-    #         'name': 'n2',
-    #         'molfraction': 0.06
-    #     },
-    #     'comp4': {
-    #         'name': 'o2',
-    #         'molfraction': 0.24
-    #     },
-    # })
+    builder.ev_output = load_node(21064)
 
     builder.zeopp.code = Code.get_from_string(zeopp_code_label)
-    builder.zeopp.atomic_radii = SinglefileData(file=os.path.abspath('../data/UFF.rad'))
+    builder.zeopp.atomic_radii = SinglefileData(file=os.path.abspath('../aiida_matdis/data/UFF.rad'))
 
     builder.raspa_base.raspa.code = Code.get_from_string(raspa_code_label)
 
@@ -90,14 +70,17 @@ def main(zeopp_code_label, raspa_code_label):
     builder.parameters = Dict(
         dict={
             'ff_framework': 'UFF',  # Default: UFF
+            "ff_cutoff": 12.5,
             'temperature': 298,  # (K) Note: higher temperature will have less adsorbate and it is faster
-            'zeopp_volpo_samples': 100,  # Default: 1e5 *NOTE: default is good for standard real-case!
-            'zeopp_sa_samples': 100,  # Default: 1e5 *NOTE: default is good for standard real-case!
+            "ff_tail_corrections": False,
+            'zeopp_volpo_samples': 1000,  # Default: 1e5 *NOTE: default is good for standard real-case!
+            'zeopp_sa_samples': 1000,  # Default: 1e5 *NOTE: default is good for standard real-case!
             'zeopp_block_samples': 100,  # Default: 100
-            'raspa_widom_cycles': 100,  # Default: 1e5
-            'raspa_gcmc_init_cycles': 100,  # Default: 1e3
-            'raspa_gcmc_prod_cycles': 100,  # Default: 1e4
+            'raspa_widom_cycles': 500,  # Default: 1e5
+            'raspa_gcmc_init_cycles': 500,  # Default: 1e3
+            'raspa_gcmc_prod_cycles': 500,  # Default: 1e4
             'pressure_list': [0.1, 1.0],
+            'probe_based': True,
         })
 
     run(builder)
