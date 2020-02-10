@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""HTSWorkChain."""
+"""MultiCompIsothermWorkChain."""
 from __future__ import absolute_import
 from __future__ import print_function
 import os
@@ -29,7 +29,7 @@ ZeoppParameters = DataFactory("zeopp.parameters")  #pylint: disable=invalid-name
 ZeoppCalculation = CalculationFactory("zeopp.network")  #pylint: disable=invalid-name
 FFBuilder = CalculationFactory('lsmo.ff_builder')
 # Default parameters
-HTSPARAMETERS_DEFAULT = Dict(
+ISOTHERMPARAMS_DEFAULT = Dict(
     dict={  #TODO: create IsothermParameters instead of Dict # pylint: disable=fixme
         "ff_framework": "UFF",  # str, Forcefield of the structure (used also as a definition of ff.rad for zeopp)
         "ff_shifted": False,  # bool, Shift or truncate at cutoff
@@ -55,9 +55,9 @@ HTSPARAMETERS_DEFAULT = Dict(
         "run_zeopp": True, #We will set it to false when it is called from MultiTemp
     })
 
-class HTSWorkChain(WorkChain):
+class MultiCompIsothermWorkChain(WorkChain):
     """
-    HTSWorkChain computes pore diameter, surface area, pore volume,
+    MultiCompIsothermWorkChain computes pore diameter, surface area, pore volume,
     and block pockets based on provided mixture composition and based on these
     results decides to run Henry coefficient calculations and
     possibly multi-components GCMC calculations using RASPA.
@@ -65,7 +65,7 @@ class HTSWorkChain(WorkChain):
 
     @classmethod
     def define(cls, spec):
-        super(HTSWorkChain, cls).define(spec)
+        super(MultiCompIsothermWorkChain, cls).define(spec)
 
         spec.expose_inputs(ZeoppCalculation, namespace='zeopp', include=['atomic_radii','code', 'metadata'])
         spec.expose_inputs(RaspaBaseWorkChain, namespace='raspa_base', exclude=['raspa.structure', 'raspa.parameters'])
@@ -90,7 +90,10 @@ class HTSWorkChain(WorkChain):
                 cls.run_raspa_widom,
                 cls.inspect_widom_calc,
                 if_(cls.should_run_gcmc)(
-                    cls.run_raspa_gcmc
+                    cls.init_raspa_gcmc,
+                    while_(cls.should_run_another_gcmc)(
+                        cls.run_raspa_gcmc,
+                    ),
                 ),
             ),
             cls.return_output_parameters,
@@ -99,7 +102,7 @@ class HTSWorkChain(WorkChain):
         spec.output('output_parameters',
                     valid_type=Dict,
                     required=True,
-                    help='Results of the HTSWorkChain')
+                    help='Results of the MultiCompIsothermWorkChain')
 
         spec.output_namespace('block_files',
                               valid_type=SinglefileData,
@@ -109,7 +112,7 @@ class HTSWorkChain(WorkChain):
 
     def setup(self):
         """Initialize parameters"""
-        self.ctx.parameters = update_workchain_params(HTSPARAMETERS_DEFAULT, self.inputs.parameters)
+        self.ctx.parameters = update_workchain_params(ISOTHERMPARAMS_DEFAULT, self.inputs.parameters)
         self.ctx.components = get_molecules_input_dict(self.inputs.mixture, self.ctx.parameters)
 
         self.ctx.temperature = int(round(self.ctx.parameters['temperature']))
@@ -311,6 +314,20 @@ class HTSWorkChain(WorkChain):
 
         return all(self.ctx.should_run_gcmc)
 
+
+    def init_raspa_gcmc(self):
+        """Choose the pressures we want to sample, report some details, and update settings for GCMC"""
+
+        self.ctx.current_p_index = 0
+        self.ctx.pressures = get_pressure_list(self.ctx.parameters)
+        self.report("<{}> pressure points are chosen for GCMC calculations".format(len(self.ctx.pressures)))
+
+    def should_run_another_gcmc(self):
+        """We run another raspa calculation only if the current iteration is
+        smaller than the total number of pressures we want to compute.
+        """
+        return self.ctx.current_p_index < len(self.ctx.pressures)
+
     def _update_param_input_for_gcmc(self):
         """Update Raspa inputs and parameters to run GCMC"""
         params = self.ctx.raspa_params
@@ -362,27 +379,21 @@ class HTSWorkChain(WorkChain):
         It submits Raspa calculation to RaspaBaseWorkchain.
         """
 
-        self.ctx.current_p_index = 0
-        self.ctx.pressures = get_pressure_list(self.ctx.parameters)
-        self.report("<{}> pressure points are chosen for GCMC calculations".format(len(self.ctx.pressures)))
-
         self.ctx.raspa_params, self.ctx.raspa_inputs = self._update_param_input_for_gcmc()
-        self.ctx.raspa_inputs['metadata']['description'] = 'Called by HTSWorkChain'
+        self.ctx.raspa_inputs['metadata']['description'] = 'Called by MultiCompIsothermWorkChain'
 
-        for index, pressure in enumerate(self.ctx.pressures):
-            self.ctx.raspa_inputs['metadata']['label'] ="RaspaGCMC_{}".format(index + 1)
-            self.ctx.raspa_inputs['metadata']['call_link_label'] = "run_raspa_gcmc_{}".format(index + 1)
-            self.ctx.raspa_params["System"][self.inputs.structure.label]["ExternalPressure"] = self.ctx.pressures[index] * 1e5
-            self.ctx.raspa_inputs['raspa']['parameters'] = Dict(dict=self.ctx.raspa_params)
+        self.ctx.raspa_inputs['metadata']['label'] ="RaspaGCMC_{}".format(self.ctx.current_p_index + 1)
+        self.ctx.raspa_inputs['metadata']['call_link_label'] = "run_raspa_gcmc_{}".format(self.ctx.current_p_index + 1)
+        self.ctx.raspa_params["System"][self.inputs.structure.label]["ExternalPressure"] = self.ctx.pressures[self.ctx.current_p_index] * 1e5
+        self.ctx.raspa_inputs['raspa']['parameters'] = Dict(dict=self.ctx.raspa_params)
 
-            running = self.submit(RaspaBaseWorkChain, **self.ctx.raspa_inputs)
-            self.report("Running Raspa GCMC @ {}K/{:.3f}bar (pressure {} of {})".format(self.ctx.temperature, self.ctx.pressures[index], index + 1,len(self.ctx.pressures)))
-            self.to_context(raspa_gcmc=append_(running))
+        if self.ctx.current_p_index > 0:
+            self.ctx.raspa_inputs['raspa']['retrieved_parent_folder'] = self.ctx.raspa_gcmc[self.ctx.current_p_index - 1].outputs.retrieved
 
-    def inspect_raspa_gcmc_calc(self):
-        """ """
-        for workchain in self.ctx.raspa_gcmc:
-            assert workchain.is_finished_ok
+        running = self.submit(RaspaBaseWorkChain, **self.ctx.raspa_inputs)
+        self.report("Running Raspa GCMC @ {}K/{:.3f}bar (pressure {} of {})".format(self.ctx.temperature, self.ctx.pressures[self.ctx.current_p_index], self.ctx.current_p_index + 1,len(self.ctx.pressures)))
+        self.ctx.current_p_index += 1
+        return ToContext(raspa_gcmc=append_(running))
 
     def return_output_parameters(self):
         """Merge all the parameters into output_parameters, depending on is_porous and is_kh_ehough."""
@@ -422,8 +433,8 @@ class HTSWorkChain(WorkChain):
                                   components=self.ctx.components,
                                   **all_out_dict))
         if self.ctx.mode == 'geom_only':
-            self.report("HTSWorkChain completed in geom_only mode: ouput Dict<{}>".format(self.outputs['output_parameters'].pk))
+            self.report("MultiCompIsothermWorkChain completed in geom_only mode: ouput Dict<{}>".format(self.outputs['output_parameters'].pk))
         else:
-            self.report("HTSWorkChain @ {}K completed: ouput Dict<{}>".format(self.ctx.temperature, self.outputs['output_parameters'].pk))
+            self.report("MultiCompIsothermWorkChain @ {}K completed: ouput Dict<{}>".format(self.ctx.temperature, self.outputs['output_parameters'].pk))
 
 # EOF

@@ -13,14 +13,16 @@
     "setup_requires": ["reentry"],
     "reentry_register": true,
     "install_requires": [
-        "aiida_core >= 1.0.0"
+        "aiida_core == 1.0.1"
     ],
     "entry_points": {
         "aiida.workflows": [
             "matdis.vlcc = aiida_matdis.workchains:VLCCWorkChain",
-            "matdis.isotherm_multi_comp = aiida_matdis.workchains:IsothermMultiCompWorkChain",
+            "matdis.multi_comp_isotherm = aiida_matdis.workchains:MultiCompIsothermWorkChain",
             "matdis.voronoi_energy = aiida_matdis.workchains:VoronoiEnergyWorkChain",
-            "matdis.hts = aiida_matdis.workchains:HTSWorkChain"
+            "matdis.hts = aiida_matdis.workchains:HTSWorkChain",
+            "matdis.hts_ev = aiida_matdis.workchains:HTSEvWorkChain",
+            "matdis.hts_multiT = aiida_matdis.workchains:HTSMultiTempWorkChain"
         ]
     },
     "data_files": [

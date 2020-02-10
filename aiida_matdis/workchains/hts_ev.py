@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""HTSWorkChain."""
+"""
+Special case of HTSWorkChain.
+It is modified to use the output dictionary of VoronoiEnergyWorkChain
+as the starting point. It helps in keeping the provenance in one hand,
+and saving time in rerunning the Zeo++ calculations in other hand.
+Here, we use VoronoiEnergyWorkChain with porousmaterials calculation.
+"""
 from __future__ import absolute_import
 from __future__ import print_function
 import os
@@ -28,6 +34,7 @@ ZeoppParameters = DataFactory("zeopp.parameters")  #pylint: disable=invalid-name
 
 ZeoppCalculation = CalculationFactory("zeopp.network")  #pylint: disable=invalid-name
 FFBuilder = CalculationFactory('lsmo.ff_builder')
+
 # Default parameters
 HTSPARAMETERS_DEFAULT = Dict(
     dict={  #TODO: create IsothermParameters instead of Dict # pylint: disable=fixme
@@ -46,6 +53,7 @@ HTSPARAMETERS_DEFAULT = Dict(
         "raspa_widom_cycles": int(1e5),  # int, Number of widom cycles
         "raspa_gcmc_init_cycles": int(1e3),  # int, Number of GCMC initialization cycles
         "raspa_gcmc_prod_cycles": int(1e4),  # int, Number of GCMC production cycles
+        "probe_based": False,
         "lcd_max": 15.0,  # Maximum allowed LCD.
         "pld_scale": 1.0,  # Scaling factor for minimum allowed PLD.
         "pressure_list": None,  # list, Pressure list for the isotherm (bar): if given it will skip  guess
@@ -55,20 +63,21 @@ HTSPARAMETERS_DEFAULT = Dict(
         "run_zeopp": True, #We will set it to false when it is called from MultiTemp
     })
 
-class HTSWorkChain(WorkChain):
+class HTSEvWorkChain(WorkChain):
     """
-    HTSWorkChain computes pore diameter, surface area, pore volume,
-    and block pockets based on provided mixture composition and based on these
-    results decides to run Henry coefficient calculations and
-    possibly multi-components GCMC calculations using RASPA.
+    HTSEvWorkChain in its current form, takes output of VoronoiEnergyWorkChain
+    as ev_output and performs similar calculations as HTSEvWorkChain.
+
+    NOTE: This version is designed to deal with only probe_based calculations.
     """
 
     @classmethod
     def define(cls, spec):
-        super(HTSWorkChain, cls).define(spec)
+        super(HTSEvWorkChain, cls).define(spec)
 
         spec.expose_inputs(ZeoppCalculation, namespace='zeopp', include=['atomic_radii','code', 'metadata'])
         spec.expose_inputs(RaspaBaseWorkChain, namespace='raspa_base', exclude=['raspa.structure', 'raspa.parameters'])
+
         spec.input('structure', valid_type=CifData, help='Adsorbent framework CIF.')
         spec.input("mixture",
                    valid_type=Dict,
@@ -77,15 +86,14 @@ class HTSWorkChain(WorkChain):
                    valid_type=Dict,
                    help='It provides the parameters which control the decision making behavior of workchain.')
 
-        spec.input("geometric",
+        spec.input("ev_output",
                    valid_type=Dict,
                    required=False,
-                   help='[Only used by IsothermMultiTempWorkChain] Already computed geometric properties')
+                   help='Output Dict of VoronoiEnergyWorkChain')
 
         spec.outline(
             cls.setup,
             cls.run_zeopp,
-            cls.inspect_zeopp_calc,
             if_(cls.should_run_widom)(
                 cls.run_raspa_widom,
                 cls.inspect_widom_calc,
@@ -99,100 +107,48 @@ class HTSWorkChain(WorkChain):
         spec.output('output_parameters',
                     valid_type=Dict,
                     required=True,
-                    help='Results of the HTSWorkChain')
-
-        spec.output_namespace('block_files',
-                              valid_type=SinglefileData,
-                              required=False,
-                              dynamic=True,
-                              help='Generated block pocket files for each probe if there are blocking spheres.')
+                    help='Results of the HTSEvWorkChain')
+        spec.expose_outputs(ZeoppCalculation, include=['block'])  #only if porous
 
     def setup(self):
         """Initialize parameters"""
-        self.ctx.parameters = update_workchain_params(HTSPARAMETERS_DEFAULT, self.inputs.parameters)
+        self.ctx.parameters = update_workchain_params(HTSPARAMETERS_DEFAULT, self.inputs.parameters, self.inputs.ev_output)
         self.ctx.components = get_molecules_input_dict(self.inputs.mixture, self.ctx.parameters)
-
-        self.ctx.temperature = int(round(self.ctx.parameters['temperature']))
-
-        # Single-Temp - Standalone!
-        if ("geometric" not in self.inputs) and (self.ctx.parameters['temperature_list'] is None):
-            self.ctx.mode = 'standalone'
-        # Geomonly for MultiTemp - So run zeo and skip the rest!
-        elif ("geometric" not in self.inputs) and (self.ctx.parameters['temperature_list'] is not None):
-            self.ctx.mode = 'geom_only'
-        # Submitting it for several temp! sO SKIP zeo and run the rest.
-        elif ("geometric" in self.inputs) and (self.ctx.parameters['temperature_list'] is None):
-            self.ctx.mode = 'multi_temp'
-
-        if self.ctx.mode == 'standalone' or self.ctx.mode =='multi_temp':
-            self.ctx.ff_params = get_ff_parameters(self.ctx.parameters, molecule=None, components=self.ctx.components)
+        self.ctx.temperature = int(self.ctx.parameters['temperature'])
+        self.ctx.ff_params = get_ff_parameters(self.ctx.parameters, molecule=None, components=self.ctx.components)
 
     def run_zeopp(self):
         """It performs the full zeopp calculation for all components."""
-        if self.ctx.mode == 'standalone' or self.ctx.mode =='geom_only':
-            zeopp_inputs = self.exposed_inputs(ZeoppCalculation, 'zeopp')
-            dict_merge(
-                zeopp_inputs, {
-                    'metadata': {
-                        'label': "ZeoppResSaVolpoBlock",
-                    },
-                    'structure': self.inputs.structure,
-                    'atomic_radii': self.inputs.zeopp.atomic_radii,
-                }
-            )
+        zeopp_inputs = self.exposed_inputs(ZeoppCalculation, 'zeopp')
+        dict_merge(
+            zeopp_inputs, {
+                'metadata': {
+                    'label': "ZeoppResSaVolpoBlock",
+                    'call_link_label': 'run_zeopp'
+                },
+                'structure': self.inputs.structure,
+                'atomic_radii': self.inputs.zeopp.atomic_radii,
+                'parameters': ZeoppParameters(dict=self.ctx.components['comp1']['zeopp']),
+            }
+        )
 
-            for key, value in self.ctx.components.get_dict().items():
-                comp = value['name']
-                dict_merge(
-                    zeopp_inputs, {
-                        'parameters': ZeoppParameters(dict=self.ctx.components[key]['zeopp']),
-                        'metadata':{
-                            'call_link_label': 'run_zeopp_' + comp
-                        }
-                    }
-                )
-
-                running = self.submit(ZeoppCalculation, **zeopp_inputs)
-                zeopp_label = "zeopp_{}".format(comp)
-                self.report("Running zeo++ res, sa, volpo, and block calculation<{}>".format(running.id))
-                self.to_context(**{zeopp_label: running})
-
-
-    def inspect_zeopp_calc(self):
-        """Asserts whether all widom calculations are finished ok."""
-        if self.ctx.mode == ('standalone' or 'geom_only'):
-            for value in self.ctx.components.get_dict().values():
-                assert self.ctx["zeopp_{}".format(value['name'])].is_finished_ok
+        running = self.submit(ZeoppCalculation, **zeopp_inputs)
+        self.report("Running zeo++ res, sa, volpo, and block calculation<{}>".format(running.id))
+        return ToContext(zeopp=running)
 
     def should_run_widom(self):
         """Decided whether to run Henry coefficient calculation or not!"""
-        self.ctx.should_run_widom = []
-        if self.ctx.mode == 'standalone' or self.ctx.mode =='geom_only':
-            self.ctx.geom = {}
-            for value in self.ctx.components.get_dict().values():
-                comp = value['name']
-                zeopp_label = "zeopp_{}".format(comp)
-                pld_lim = value["proberad"] * self.ctx.parameters["pld_scale"]
-                self.ctx.geom[comp] = get_geometric_output(self.ctx[zeopp_label].outputs.output_parameters)
-                if self.ctx.geom[comp]['Number_of_blocking_spheres'] > 0:
-                    self.out("block_files.{}_block_file".format(comp), self.ctx[zeopp_label].outputs.block)
-            if self.ctx.mode == 'standalone':
-                pld_component = self.ctx.geom[comp]["Largest_free_sphere"]
-                lcd_component = self.ctx.geom[comp]["Largest_included_sphere"]
-                poav_component = self.ctx.geom[comp]["POAV_A^3"]
-                lcd_lim = self.ctx.parameters["lcd_max"]
-                if (lcd_component <= lcd_lim) and (pld_component >= pld_lim) and (poav_component > 0.0):
-                    self.ctx.should_run_widom.append(True)
-                else:
-                    self.ctx.should_run_widom.append(False)
-            else:
-                self.ctx.should_run_widom.append(False)
-        elif self.ctx.mode == 'multi_temp':
-            self.ctx.geom = self.inputs['geometric']['geometric_output']
-            self.ctx.should_run_widom.append(True)
+        self.ctx.geom = get_geometric_output(self.ctx.zeopp.outputs.output_parameters)
 
-        return all(self.ctx.should_run_widom)
+        if self.ctx.geom['is_porous']:
+            if self.ctx.geom['Number_of_blocking_spheres'] > 0:
+                self.out_many(self.exposed_outputs(self.ctx.zeopp, ZeoppCalculation))
+                # self.out("block_files", self.ctx.zeopp.outputs.block)
+            self.ctx.should_run_widom = True
+        else:
+            self.ctx.should_run_widom = True
 
+        return self.ctx.should_run_widom
 
     def _get_widom_param(self):
         """Write Raspa input parameters from scratch, for a Widom calculation"""
@@ -235,16 +191,9 @@ class HTSWorkChain(WorkChain):
             self.ctx.raspa_params["Component"][comp] = {}
             self.ctx.raspa_params["Component"][comp]["MoleculeDefinition"] = value['forcefield']
             self.ctx.raspa_params["Component"][comp]["WidomProbability"] = 1.0
-            if self.ctx.geom[comp]['Number_of_blocking_spheres'] > 0:
-                self.ctx.raspa_params["Component"][comp]["BlockPocketsFileName"] = comp + "_block_file"
-                if self.ctx.mode == 'standalone':
-                    self.ctx.raspa_inputs["raspa"]["block_pocket"] = {}
-                    self.ctx.raspa_inputs["raspa"]["block_pocket"] = {
-                        comp + "_block_file": self.ctx[zeopp_label].outputs.block
-                    }
-                if self.ctx.mode == 'multi_temp':
-                    self.ctx.raspa_inputs["raspa"]["block_pocket"] = {}
-                    self.ctx.raspa_inputs["raspa"]["block_pocket"][comp + "_block_file"] = self.ctx.blocks[comp + "_block_file"]
+            if self.ctx.geom['Number_of_blocking_spheres'] > 0:
+                self.ctx.raspa_params["Component"][comp]["BlockPocketsFileName"] = "block_file"
+                self.ctx.raspa_inputs["raspa"]["block_pocket"] = {"block_file": self.ctx.zeopp.outputs.block}
 
             if value['charged']:
                 self.ctx.raspa_params["GeneralSettings"].update({
@@ -315,8 +264,6 @@ class HTSWorkChain(WorkChain):
         """Update Raspa inputs and parameters to run GCMC"""
         params = self.ctx.raspa_params
         inputs = self.ctx.raspa_inputs
-        inputs["raspa"]["block_pocket"] = {}
-        inputs["raspa"]["block_pocket"] = self.ctx.blocks
         params["GeneralSettings"].update({
             "NumberOfInitializationCycles": self.ctx.parameters['raspa_gcmc_init_cycles'],
             "NumberOfCycles": self.ctx.parameters['raspa_gcmc_prod_cycles'],
@@ -325,8 +272,7 @@ class HTSWorkChain(WorkChain):
         })
         params["Component"] = {}
         params["Component"] = {item: {} for index, item in enumerate(list(self.ctx.components.get_dict()))}
-        if self.ctx.mode == 'standalone':
-            inputs["raspa"]["block_pocket"] = {}
+
         for key, value in self.ctx.components.get_dict().items():
             comp = value['name']
             zeopp_label = "zeopp_{}".format(comp)
@@ -349,11 +295,11 @@ class HTSWorkChain(WorkChain):
                     "EwaldPrecision": 1e-6
                 })
 
-            if self.ctx.geom[comp]['Number_of_blocking_spheres'] > 0:
+            if self.ctx.geom['Number_of_blocking_spheres'] > 0:
                 params["Component"][comp]["BlockPocketsFileName"] = {}
-                params["Component"][comp]["BlockPocketsFileName"][self.inputs.structure.label] = comp + "_block_file"
-                if self.ctx.mode == 'standalone':
-                    inputs["raspa"]["block_pocket"][comp + "_block_file"] = self.ctx[zeopp_label].outputs.block
+                params["Component"][comp]["BlockPocketsFileName"][self.inputs.structure.label] = "block_file"
+
+        inputs["raspa"]["block_pocket"] = {"block_file": self.ctx.zeopp.outputs.block}
 
         return params, inputs
 
@@ -389,41 +335,28 @@ class HTSWorkChain(WorkChain):
 
         all_out_dict = {}
 
-        if self.ctx.mode == 'geom_only':
+        all_out_dict['zeopp_pld'] = self.ctx.geom
+
+        if self.ctx.should_run_widom:
             for value in self.ctx.components.get_dict().values():
-                zeopp_label = "zeopp_{}".format(value['name'])
-                all_out_dict[zeopp_label] = self.ctx.geom[value['name']]
-                self.ctx.pressures = None
-                self.ctx.components = None
-
+                widom_label = "widom_{}".format(value['name'])
+                all_out_dict[widom_label] = self.ctx[widom_label].outputs.output_parameters
         else:
-            if all(self.ctx.should_run_widom):
-                if self.ctx.mode == 'multi_temp':
-                    all_out_dict['geometric'] = self.inputs['geometric']
+            self.ctx.components = None
 
-                for value in self.ctx.components.get_dict().values():
-                    widom_label = "widom_{}".format(value['name'])
-                    zeopp_label = "zeopp_{}".format(value['name'])
-                    all_out_dict[widom_label] = self.ctx[widom_label].outputs.output_parameters
-                    if self.ctx.mode == 'standalone':
-                        all_out_dict[zeopp_label] = self.ctx.geom[value['name']]
-                if all(self.ctx.should_run_gcmc):
-                    for workchain in self.ctx.raspa_gcmc:
-                        all_out_dict[workchain.label] = workchain.outputs.output_parameters
-                else:
-                    self.ctx.pressures = None
-            else:
-                self.ctx.pressures = None
-                self.ctx.components = None
+        if all(self.ctx.should_run_gcmc):
+            for workchain in self.ctx.raspa_gcmc:
+                all_out_dict[workchain.label] = workchain.outputs.output_parameters
+        else:
+            self.ctx.pressures = None
+
         self.out(
             "output_parameters",
             get_output_parameters(wc_params=self.ctx.parameters,
                                   pressures=self.ctx.pressures,
                                   components=self.ctx.components,
                                   **all_out_dict))
-        if self.ctx.mode == 'geom_only':
-            self.report("HTSWorkChain completed in geom_only mode: ouput Dict<{}>".format(self.outputs['output_parameters'].pk))
-        else:
-            self.report("HTSWorkChain @ {}K completed: ouput Dict<{}>".format(self.ctx.temperature, self.outputs['output_parameters'].pk))
+
+        self.report("HTSEvWorkChain @ {}K computed: ouput Dict<{}>".format(self.ctx.temperature, self.outputs['output_parameters'].pk))
 
 # EOF

@@ -25,12 +25,16 @@ def dict_merge(dct, merge_dct):
 
 
 @calcfunction
-def aiida_dict_merge(to_dict, from_dict):
+def update_workchain_params(to_dict, from_dict, ev_output=None):
     """Merge two aiida Dict objects."""
     to_dict = to_dict.get_dict()
 
     if isinstance(from_dict, Dict):
         from_dict = from_dict.get_dict()
+
+    if ev_output is not None:
+        ev_output = ev_output.get_dict()
+        from_dict['probe_rad'] = ev_output['zeopp']['Largest_free_sphere'] / 2
 
     dict_merge(to_dict, from_dict)
 
