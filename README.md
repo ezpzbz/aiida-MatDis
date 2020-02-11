@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/220193316.svg)](https://zenodo.org/badge/latestdoi/220193316)
+
 # AiiDA-MatDis
 
 You may find three types of AiiDA WorkChains in this
