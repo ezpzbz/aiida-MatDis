@@ -35,6 +35,7 @@ To use `AiiDA-MatDis` workchains use the following packages:
 
 # Citation
 If you benefit from `AiiDA` in your research, please cite [this paper](https://www.sciencedirect.com/science/article/pii/S0927025615005820?via%3Dihub) by *G. Pizzi et. al.*
+
 If you use above-mentioned workchains for gas adsorption, please cite [this paper](https://pubs.acs.org/doi/10.1021/acscentsci.9b00619) by *D. Ongari et. al.*
 
 # Documentation
@@ -44,3 +45,4 @@ the [Wiki](https://github.com/pzarabadip/aiida-MatDis/wiki) (In Progress).
 # Acknowledgment
 I would like to thank the funding received from the European Union’s Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie Actions and cofinancing by the South Moravian Region under agreement 665860. This software reflects only the authors’ view and the EU is not responsible for any use that may be made of the information it contains.
 
+![aiida-MatDis](ackn_logo.png)
