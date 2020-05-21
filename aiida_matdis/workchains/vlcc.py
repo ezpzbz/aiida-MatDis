@@ -17,7 +17,7 @@ from aiida_matdis.aide_de_camp import (get_molecule_dict,
                                        update_workchain_params)
 
 RaspaBaseWorkChain = WorkflowFactory('raspa.base')  #pylint: disable=invalid-name
-FFBuilder = CalculationFactory('lsmo.ff_builder')
+FFBuilder = CalculationFactory('matdis.ff_builder')
 
 VLCPARAMETERS_DEFAULT = Dict(
     dict={  #TODO: create IsothermParameters instead of Dict # pylint: disable=fixme

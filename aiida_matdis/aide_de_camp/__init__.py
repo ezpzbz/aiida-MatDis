@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Copied from aiida-lsmo utils"""
-from __future__ import absolute_import
+from .ff_builder_module import ff_builder
 from .multiply_unitcell import get_replciation_factors
 from .general import (get_molecules_input_dict,
                       get_molecule_dict,

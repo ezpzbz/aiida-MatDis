@@ -216,7 +216,10 @@ def get_output_parameters(wc_params, pressures=None, components=None, **all_out_
                 for label in ['enthalpy_of_adsorption_average', 'enthalpy_of_adsorption_dev']:
                     if i == 0:
                         isotherm[label][comp] = []
-                    isotherm[label][comp].append(conv_ener * gcmc_out['components'][comp][label])
+                    if len(components.get_dict().values()) > 1:
+                        isotherm[label][comp].append(conv_ener * gcmc_out['components'][comp][label])
+                    else:
+                        isotherm[label][comp].append(conv_ener * gcmc_out['general'][label])
 
                 for label in general_labels:
                     out_dict[label][comp] = gcmc_out['components'][comp][label]

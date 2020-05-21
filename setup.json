@@ -13,9 +13,12 @@
     "setup_requires": ["reentry"],
     "reentry_register": true,
     "install_requires": [
-        "aiida_core == 1.0.1"
+        "aiida-core>=1.1.0,<2.0.0"
     ],
     "entry_points": {
+        "aiida.calculations": [
+            "matdis.ff_builder = aiida_matdis.aide_de_camp:ff_builder"
+        ],
         "aiida.workflows": [
             "matdis.vlcc = aiida_matdis.workchains:VLCCWorkChain",
             "matdis.multi_comp_isotherm = aiida_matdis.workchains:MultiCompIsothermWorkChain",
