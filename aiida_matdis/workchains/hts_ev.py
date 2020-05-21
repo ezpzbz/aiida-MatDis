@@ -33,7 +33,7 @@ CifData = DataFactory("cif")  #pylint: disable=invalid-name
 ZeoppParameters = DataFactory("zeopp.parameters")  #pylint: disable=invalid-name
 
 ZeoppCalculation = CalculationFactory("zeopp.network")  #pylint: disable=invalid-name
-FFBuilder = CalculationFactory('lsmo.ff_builder')
+FFBuilder = CalculationFactory('matdis.ff_builder')
 
 # Default parameters
 HTSPARAMETERS_DEFAULT = Dict(
